@@ -3,9 +3,9 @@ import numpy as np
 import cupy as cp
 from dimod.utilities import qubo_to_ising
 from itertools import product
-import cxxjij
+from openjij import cxxjij
 import os
-
+import dwave.inspector
 class SGD:
     def __init__(self, opt_params):
         self.lr = opt_params['lr']
@@ -216,7 +216,7 @@ class RBM:
             for _ in range(t):
                 vn, pvn = self.get_visible(hn)
                 hn, phn = self.get_hidden(vn)
-            self.update_cd(v0, vn, ph0, phn)
+            self.update_cd(v0, vn, h0, hn)
 
     def train_cd_all_visible(self, data_v, data_h, t=1):
         size = (len(data_v) // self.batch_size) * self.batch_size
@@ -518,10 +518,17 @@ class RBMCalibWithSampler(RBM): #This is abstract
 
             hn = hs.copy()
             vn = vs.copy()
+            #vn, phn = self.get_visible(hs)
+            #hn, phn = self.get_hidden(vn)
+            #hn, phn = self.get_hidden(vn1)
+            #vn, phn = self.get_visible(hn1)
+            
+            
             for __ in range(cd_k):
-                tmp_vn, pvn = self.get_visible(hn)
+                #tmp_vn, pvn = self.get_visible(hn)
                 hn, phn = self.get_hidden(vn)
-                vn = tmp_vn
+                vn, pvn = self.get_visible(hn)
+                #hn = tmp_hn
 
             self.w = org_w
             self.bv = org_bv
@@ -668,8 +675,10 @@ class DW32x8Sampler:
         num_reads = int(np.ceil(n / self.grp_size))
         samples = []
         while num_reads > 0:
-            tmp_num_reads = min(num_reads, 10000)
-            self.response = self.sampler.sample_ising(self.h, self.j, num_reads=tmp_num_reads, auto_scale=False)
+            tmp_num_reads = min(num_reads, 2000)
+            self.response = self.sampler.sample_ising(self.h, self.j, num_reads=tmp_num_reads, auto_scale=False, answer_mode='raw')
+            
+            #dwave.inspector.show(self.response) 
             num_reads -= tmp_num_reads          
             for r in self.response.record:
                 samples.append(r[0])
@@ -701,9 +710,11 @@ class DW2000_32x8Sampler(DW32x8Sampler):
 class DWAdvantage_32x8Sampler(DW32x8Sampler):
     J_LIMIT = [-1, 1]
     H_LIMIT = [-4, 4]
-    START_CELLS_HOR = [(0, 0, 1), (3, 0, 0), (3, 0, 1), (3, 0, 2), (5, 0, 1), (5, 0, 2), (8, 7, 0), (8, 7, 1), (8, 7, 2), (11, 7, 0), (11, 7, 1), (11, 7, 2), (13, 7, 0), (13, 7, 1), (13, 7, 2)] #for Advantage_system6.1
-    START_CELLS_VER = [(0, 8, 2), (0, 11, 1), (0, 13, 0), (0, 13, 1), (0, 13, 2), (7, 1, 1), (7, 1, 2), (7, 3, 0), (7, 3, 1)]#, (7, 5, 0), (7, 5, 1), (7, 5, 2)]
-    SOLVER = 'Advantage_system6.1'
+    START_CELLS_HOR = [(0, 0, 1), (3, 0, 0), (3, 0, 1), (3, 0, 2), (5, 0, 1), (5, 0, 2), (8, 7, 0), (8, 7, 1), (8, 7, 2), (11, 7, 0), (11, 7, 1), (11, 7, 2), (13, 7, 0), (13, 7, 1), (13, 7, 2)] #for Advantage_system6.2
+    START_CELLS_VER = [(0, 8, 2), (0, 11, 1), (0, 13, 0), (0, 13, 1), (0, 13, 2), (7, 1, 1), (7, 1, 2), (7, 3, 1)]#, (7, 5, 0), (7, 5, 1), (7, 5, 2)]
+    #START_CELLS_HOR = [(0, 0, 1)]
+    #START_CELLS_VER = []
+    SOLVER = 'Advantage_system6.2'
 
     @staticmethod
     def get_ver_node(r, c, grp, idx):

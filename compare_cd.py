@@ -7,12 +7,13 @@ import numpy as np
 
 GPU = True  #Only used for calculating KL divergence, not training
 OPTIMIZER = 'adam'
-OPT_PARAMS = {'lr':0.005, 'beta1':0.9, 'beta2':0.999, 'eps':1e-8, 'decay':0.999997}
+#OPT_PARAMS = {'lr':0.005, 'beta1':0.9, 'beta2':0.999, 'eps':1e-8, 'decay':0.999997}
+OPT_PARAMS = {'lr':0.01, 'beta1':0.9, 'beta2':0.999, 'eps':1e-8, 'decay':1}
 EPOCH = 1000
-BATCH = 100
-HIDDEN = 20
-CD_K_LIST = [1, 2, 4, 8, 16]
-SEED = 1
+BATCH = 1000
+HIDDEN = 8
+CD_K_LIST = [1]
+SEED = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 CALC_KL_STEP = 20
 
 def generate_conf_log(dir):
@@ -61,7 +62,7 @@ if __name__ == '__main__':
     os.makedirs(save_dir)
     generate_conf_log(save_dir)
 
-    np.random.seed(SEED)
+    np.random.seed(SEED[0])
 
     images = np.load(os.path.dirname(os.path.abspath(__file__)) + '/processed_mnist.npy')
     train_imgs = images[:60000, :]
@@ -71,13 +72,15 @@ if __name__ == '__main__':
     
     nv = images.shape[1]
 
-    min_kl_train_list = np.ones((len(CD_K_LIST), 1))
-    min_kl_test_list = np.ones((len(CD_K_LIST), 1))
+    min_kl_train_list = np.ones((len(CD_K_LIST), len(SEED)))
+    min_kl_test_list = np.ones((len(CD_K_LIST), len(SEED)))
 
-    for i, k in enumerate(CD_K_LIST):
-        print(f'\n----------------------------------------------------')
-        print(f'Start training with CD-k, k is {k}')
-        kl_results, min_kl_train_list[i, 0], min_kl_test_list[i, 0] = train(nv, HIDDEN, k, save_dir)
-        np.savetxt(save_dir + f'/{k}.csv', kl_results, delimiter=',', header='train, test')
-        np.savetxt(save_dir + f'/min_kl_train.csv', min_kl_train_list, delimiter=',')
-        np.savetxt(save_dir + f'/min_kl_test.csv', min_kl_test_list, delimiter=',')
+    for j, s in enumerate(SEED):
+        np.random.seed(s)
+        for i, k in enumerate(CD_K_LIST):
+            print(f'\n----------------------------------------------------')
+            print(f'Start training with CD-k, k is {k}, seed is {s}')
+            kl_results, min_kl_train_list[i, j], min_kl_test_list[i, j] = train(nv, HIDDEN, k, save_dir)
+            np.savetxt(save_dir + f'/{k}_{s}.csv', kl_results, delimiter=',', header='train, test')
+    np.savetxt(save_dir + f'/min_kl_train.csv', min_kl_train_list, delimiter=',')
+    np.savetxt(save_dir + f'/min_kl_test.csv', min_kl_test_list, delimiter=',')

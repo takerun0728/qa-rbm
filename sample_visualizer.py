@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-LOAD_FILE = os.path.dirname(os.path.abspath(__file__)) + '/dwave_samples/hidden8/220505050915/samples.npy'
+LOAD_FILE = os.path.dirname(os.path.abspath(__file__)) + '/results/compare_calib/230812222348/3/samples2.npy'
 N = 50
 COL = 10
 ROW = N // COL
