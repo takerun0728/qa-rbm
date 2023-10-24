@@ -4,11 +4,12 @@ import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
-LOAD_FILE = os.path.dirname(os.path.abspath(__file__)) + '/results/compare_cd/230812054948/min_kl_train_1.npz'
-CALIB_PARAMS = {'lr': 0.00001, 'decay': 0.985}
+LOAD_FILE = os.path.dirname(os.path.abspath(__file__)) + '/results/compare_cd/230825061647/min_kl_train_1.npz'
+CALIB_PARAMS = {'lr': 0.00005, 'decay': 0.995, 'minlr':0.0000001}
+CALIB_PARAMS2 = {'lr': 0.0005, 'decay': 0.998, 'minlr':0.000005}
 #CALIB_PARAMS = {'lr':0.01, 'beta1':0.9, 'beta2':0.999, 'eps':1e-8, 'decay':1}
 #EPOCH = 0
-EPOCH = 200
+EPOCH = [500, 500, 500]
 BATCH_SAMPLE_NUM = 1012
 #EVAL_SAMPLE_NUM = 101200#0
 EVAL_SAMPLE_NUM = 1012000
@@ -20,15 +21,11 @@ MANY_N_TH = 0
 MANY_N = 10
 #MODE = 'DWAVEAdvantage'
 MODE = 'GIBBS'
-K = 7
-#SEED = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-#SEED = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-#SEED = [31, 32, 33, 34, 35, 36, 37, 38, 39, 30]
-#SEED = [41, 42, 43, 44, 45, 46, 47, 48, 49, 40]
-#SEED = [51, 52, 53, 54, 55, 56, 57, 58, 59, 50]
-#SEED = [61, 62, 63, 64, 65, 66, 67, 68, 69, 60]
-#SEED = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-SEED = [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 30]
+K = 1
+
+START_SEED = 1
+SEEDS_NUM = 5
+
 def generate_hist(energies, ideal_energies, filename, binsize):
     plt.cla()
     l = int(np.floor(np.min([np.min(energies), np.min(ideal_energies)])))
@@ -46,7 +43,8 @@ def calc_kl_average(rbm, vs, hs, n):
 if __name__ == '__main__':
     np.random.seed(0)
     now = datetime.datetime.now()
-    save_dir = os.path.dirname(os.path.abspath(__file__)) + now.strftime('/results/compare_calib/%y%m%d%H%M%S')
+    time_str = now.strftime('%y%m%d%H%M%S')
+    save_dir = os.path.dirname(os.path.abspath(__file__)) + '/results/compare_calib/' + time_str
     os.makedirs(save_dir)
 
     conf_log = ''
@@ -59,7 +57,8 @@ if __name__ == '__main__':
     conf_log += f'Threshold epoch number for chaging calibration n: {MANY_N_TH}\n'
     conf_log += f'First calibration n : {MANY_N}\n'
     conf_log += f'Mode: {MODE}\n'
-    conf_log += f'Seed: {SEED}\n'
+    conf_log += f'Start seed: {START_SEED}\n'
+    conf_log += f'Number of seeds: {SEEDS_NUM}\n'
     conf_log += f'CD-K: {K}\n'
 
     tmp_rbm = RBM(0, 0)
@@ -81,37 +80,42 @@ if __name__ == '__main__':
     f.write(conf_log)
     f.close()
     
-    kls = np.zeros((len(SEED), len(COMP_SAMPLE_NUMS), 5))
-    for k, s in enumerate(SEED):
+    kls = np.zeros((SEEDS_NUM, len(COMP_SAMPLE_NUMS), 5))
+    for k in range(SEEDS_NUM):
+        s = k + START_SEED
         np.random.seed(s)
         os.makedirs(save_dir + f'/{s}')
         print(f'Seeed is {s}')
 
         rbm_one = RBMOneCoefCalibWithSampler(0, 0, calib_optimizer='sgd', calib_w_params=CALIB_PARAMS, calib_bv_params=CALIB_PARAMS, calib_bh_params=CALIB_PARAMS) #nv and nh are automatically set when loading
         rbm_each = RBMEachCoefCalibWithSampler(0, 0, calib_optimizer='sgd', calib_w_params=CALIB_PARAMS, calib_bv_params=CALIB_PARAMS, calib_bh_params=CALIB_PARAMS)
-        rbm_allbias = RBMAllBiasCalibWithSampler(0, 0, calib_optimizer='sgd', calib_w_params=CALIB_PARAMS, calib_bv_params=CALIB_PARAMS, calib_bh_params=CALIB_PARAMS)
+        rbm_allbias = RBMAllBiasCalibWithSampler(0, 0, calib_optimizer='sgd', calib_w_params=CALIB_PARAMS, calib_bv_params=CALIB_PARAMS2, calib_bh_params=CALIB_PARAMS2)
         rbms = [rbm_one, rbm_each, rbm_allbias]
-        calib_process = [np.zeros((EPOCH, 4)), np.zeros((EPOCH, 4)), np.zeros((EPOCH, 2 + tmp_rbm.nv + tmp_rbm.nh))]
+        calib_process = [np.zeros((EPOCH[0], 4)), np.zeros((EPOCH[1], 4)), np.zeros((EPOCH[2], 2 + tmp_rbm.nv + tmp_rbm.nh))]
 
         print(f'Generating ideal samples')
         ideal_sampler = RBMSampler(tmp_rbm.nv, tmp_rbm.nh)
         ideal_sampler.set_weights(tmp_rbm.w, tmp_rbm.bv, tmp_rbm.bh)
         ideal_vs, ideal_hs = ideal_sampler.get_samples(EVAL_SAMPLE_NUM)
-        a = calc_kl_average(tmp_rbm, ideal_vs, ideal_hs, 10000)
+        ideal_total_energies = tmp_rbm.get_energy(ideal_vs, ideal_hs)
+        ideal_weight_energies = tmp_rbm.get_weight_energy(ideal_vs, ideal_hs)
+        ideal_visible_energies = tmp_rbm.get_visible_bias_energy(ideal_vs)
+        ideal_hidden_energies = tmp_rbm.get_hidden_bias_energy(ideal_hs)
+        np.save(save_dir + f'/{s}/ideal_energies', np.hstack([ideal_total_energies.reshape(-1, 1), ideal_weight_energies.reshape(-1, 1), ideal_visible_energies.reshape(-1, 1), ideal_hidden_energies.reshape(-1, 1)]))
         
         for i, rbm in enumerate(rbms):
             print(f'Calibrating {i}')
             rbm.load(LOAD_FILE)
-            if i == 1:
-                rbm_each.alpha = rbm_one.alpha
-                rbm_each.beta_v = rbm_one.alpha
-                rbm_each.beta_h = rbm_one.alpha
-            elif i == 2:
-                rbm_allbias.alpha = rbm_each.alpha
-                rbm_allbias.beta_v[:] = rbm_each.beta_v
-                rbm_allbias.beta_h[:] = rbm_each.beta_h
+            # if i == 1:
+            #     rbm_each.alpha = rbm_one.alpha
+            #     rbm_each.beta_v = rbm_one.alpha
+            #     rbm_each.beta_h = rbm_one.alpha
+            # elif i == 2:
+            #     rbm_allbias.alpha = rbm_each.alpha
+            #     rbm_allbias.beta_v[:] = rbm_each.beta_v
+            #     rbm_allbias.beta_h[:] = rbm_each.beta_h
 
-            for j in range(EPOCH):
+            for j in range(EPOCH[i]):
                 calib_process[i][j, 0] = j
                 calib_process[i][j, 1:] = np.hstack([rbm.alpha, rbm.beta_v, rbm.beta_h])
                 print(f'{j} {np.average(rbm.alpha)} {np.average(rbm.beta_v)} {np.average(rbm.beta_h)}')
@@ -120,7 +124,11 @@ if __name__ == '__main__':
                 if j <= MANY_N_TH:
                     rbm.calibrate(vs, hs, cd_k=K, n=MANY_N)
                 else:
-                    rbm.calibrate(vs, hs, cd_k=K, n=1)
+                    rbm.calibrate(vs, hs, cd_k=K, n=10)
+                if i == 2:
+                    print(rbm.optimizer_beta_v.lr)
+                else:
+                    print(rbm.optimizer_alpha.lr)
 
             np.savetxt(save_dir + f'/{s}/calib_process{i}.csv', calib_process[i], delimiter=',')
             
@@ -138,23 +146,21 @@ if __name__ == '__main__':
                 kls[k, j, i + 2] =  calc_kl_average(tmp_rbm, eval_vs[:n], eval_hs[:n], n)
 
             print(f"Generating histgrams {i}")
-            energies = tmp_rbm.get_energy(eval_vs, eval_hs)
-            ideal_energies = tmp_rbm.get_energy(ideal_vs, ideal_hs)
-            generate_hist(energies, ideal_energies, save_dir + f'/{s}/hist_total{i}.png', 0.5)
+            total_energies = tmp_rbm.get_energy(eval_vs, eval_hs)
+            generate_hist(total_energies, ideal_total_energies, save_dir + f'/{s}/hist_total{i}.png', 0.5)
 
-            energies = tmp_rbm.get_weight_energy(eval_vs, eval_hs)
-            ideal_energies = tmp_rbm.get_weight_energy(ideal_vs, ideal_hs)
-            generate_hist(energies, ideal_energies, save_dir + f'/{s}/hist_w{i}.png', 0.5)
+            weight_energies = tmp_rbm.get_weight_energy(eval_vs, eval_hs)
+            generate_hist(weight_energies, ideal_weight_energies, save_dir + f'/{s}/hist_w{i}.png', 0.5)
             
-            energies = tmp_rbm.get_visible_bias_energy(eval_vs)
-            ideal_energies = tmp_rbm.get_visible_bias_energy(ideal_vs)
-            generate_hist(energies, ideal_energies, save_dir + f'/{s}/hist_bv{i}.png', 0.5)
+            visible_energies = tmp_rbm.get_visible_bias_energy(eval_vs)
+            generate_hist(visible_energies, ideal_visible_energies, save_dir + f'/{s}/hist_bv{i}.png', 0.5)
             
-            energies = tmp_rbm.get_hidden_bias_energy(eval_hs)
-            ideal_energies = tmp_rbm.get_hidden_bias_energy(ideal_hs)
-            generate_hist(energies, ideal_energies, save_dir + f'/{s}/hist_bh{i}.png', 0.5)
+            hidden_energies = tmp_rbm.get_hidden_bias_energy(eval_hs)
+            generate_hist(hidden_energies, ideal_hidden_energies, save_dir + f'/{s}/hist_bh{i}.png', 0.5)
+
+            np.save(save_dir + f'/{s}/energies{i}', np.hstack([total_energies.reshape(-1, 1), weight_energies.reshape(-1, 1), visible_energies.reshape(-1, 1), hidden_energies.reshape(-1, 1)]))
         
         np.savetxt(save_dir + f'/{s}/kls.csv', kls[k], delimiter=',')
     print(kls[:,:,1:].mean(axis=0))
     print(kls[:,:,1:].std(axis=0))
-    np.savetxt(save_dir + '/summary_kl.csv', np.hstack([kls[0,:,0].reshape(-1,1), kls[:,:,1:].mean(axis=0), kls[:,:,1:].std(axis=0)]), delimiter=',')
+    np.savetxt(save_dir + f'/summary_kl_{time_str}.csv', np.hstack([kls[0,:,0].reshape(-1,1), kls[:,:,1:].mean(axis=0), kls[:,:,1:].std(axis=0)]), delimiter=',')

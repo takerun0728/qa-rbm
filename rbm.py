@@ -6,60 +6,66 @@ from itertools import product
 from openjij import cxxjij
 import os
 import dwave.inspector
-class SGD:
+
+class Optimizaer:
     def __init__(self, opt_params):
         self.lr = opt_params['lr']
         self.decay = opt_params['decay']
+        self.minlr = opt_params['minlr']
+
+    def __call__(self):
+        self.lr *= self.decay
+        self.lr = max(self.lr, self.minlr)
+
+class SGD(Optimizaer):
+    def __init__(self, opt_params):
+        super().__init__(opt_params)
     
     def __call__(self, grad):
         ret = self.lr * grad
-        self.lr *= self.decay
+        super().__call__()
         return ret
 
-class Momentum:
+class Momentum(Optimizaer):
     def __init__(self, opt_params):
-        self.lr = opt_params['lr']
-        self.decay = opt_params['decay']
+        super().__init__(opt_params)
         self.alpha = opt_params['alpha']
         self.delta = 0
 
     def __call__(self, grad):
         self.delta = (1 - self.alpha) * self.lr * grad + self.alpha * self.delta
-        self.lr *= self.decay
+        super().__call__()
         return self.delta
 
-class AdaGrad:
+class AdaGrad(Optimizaer):
     def __init__(self, opt_params):
-        self.lr = opt_params['lr']
-        self.decay = opt_params['decay']
+        super().__init__(opt_params)
         self.h = 0
     
     def __call__(self, grad):
         self.h = self.h + grad**2
         ret = self.lr * grad / np.sqrt(self.h)
-        self.lr *= self.decay
+        super().__call__()
         return ret
 
-class RMSProp:
+class RMSProp(Optimizaer):
     def __init__(self, opt_params):
-        self.lr = opt_params['lr']
+        super().__init__(opt_params)
         self.rho = opt_params['rho']
-        self.decay = opt_params['decay']
         self.h = 0
     
     def __call__(self, grad):
         self.h = self.rho * self.h + (1 - self.rho) * grad**2 + 0.00001
         ret = self.lr * grad / np.sqrt(self.h)
-        self.lr *= self.decay
+        super().__call__()
         return ret
 
-class Adam:
+class Adam(Optimizaer):
     def __init__(self, opt_params):
-        self.lr = opt_params['lr']
+        super().__init__(opt_params)
         self.beta1 = opt_params['beta1']
         self.beta2 = opt_params['beta2']
         self.eps = opt_params['eps']
-        self.decay = opt_params['decay']
         self.m = 0
         self.v = 0
     
@@ -67,7 +73,7 @@ class Adam:
         self.m = self.beta1 * self.m + (1 - self.beta1) * grad
         self.v = self.beta2 * self.v + (1 - self.beta2) * grad**2
         ret = self.lr * self.m / (np.sqrt(self.v) + self.eps)
-        self.lr *= self.decay
+        super().__call__()
         return ret
 
 def sigmoid(z, xp=np):
@@ -94,7 +100,7 @@ def select_optimizer(optimizer, opt_params):
 class RBM:
     CALC_PARTITION_DIV_DIM = 12
 
-    def __init__(self, nv, nh, optimizer='momentum', opt_params={'lr':0.01, 'alpha':0.9, 'decay':1}, batch_size=100, gpu=False, j_limit=None, h_limit=None):
+    def __init__(self, nv, nh, optimizer='momentum', opt_params={'lr':0.01, 'alpha':0.9, 'decay':1, 'minlr':np.inf}, batch_size=100, gpu=False, j_limit=None, h_limit=None):
         self.nv = nv
         self.nh = nh
         self.bv = np.array(np.random.rand(nv)) * 0
@@ -424,24 +430,7 @@ class RBMStaticEstimator(RBM):
         return kl
 
 class RBMStaticEstimatorAllBias(RBMStaticEstimator):
-    def __init__(self, nv, nh, calib_optimizer='sgd', calib_opt_params={'lr': 0.000000001, 'decay': 1}, gpu=False):
-        super().__init__(nv, nh, calib_optimizer, calib_opt_params, gpu)
-        self.q = np.ones(nv)
-        self.r = np.ones(nh)
-
-    def load(self, path):
-        super().load(path)
-        self.q = np.ones(self.nv)
-        self.r = np.ones(self.nh)
-
-    def estimate(self, vs, hs, cd_k=8):   #Update p, q, r
-        vn, hn = self.get_cd_samples(vs, hs, cd_k)
-        self.p += self.optimizer_p(((vs @ self.w).reshape(-1, 1, self.nh) @ hs.reshape(-1, self.nh, 1) - (vn @ self.w).reshape(-1, 1, self.nh) @ hn.reshape(-1, self.nh, 1)).sum())
-        self.q += self.optimizer_q((self.bv * vs - self.bv * vn).sum(axis=0))
-        self.r += self.optimizer_r((self.bh * hs - self.bh * hn).sum(axis=0))
-
-class RBMStaticEstimatorAllBias(RBMStaticEstimator):
-    def __init__(self, nv, nh, calib_optimizer='sgd', calib_opt_params={'lr': 0.000000001, 'decay': 1}, gpu=False):
+    def __init__(self, nv, nh, calib_optimizer='sgd', calib_opt_params={'lr': 0.000000001, 'decay': 1, 'minlr':np.inf}, gpu=False):
         super().__init__(nv, nh, calib_optimizer, calib_opt_params, gpu)
         self.q = np.ones(nv)
         self.r = np.ones(nh)
@@ -458,7 +447,7 @@ class RBMStaticEstimatorAllBias(RBMStaticEstimator):
         self.r += self.optimizer_r((self.bh * hs - self.bh * hn).sum(axis=0))
 
 class RBMStaticEstimatorFull(RBMStaticEstimator):
-    def __init__(self, nv, nh, calib_optimizer='sgd', calib_opt_params={'lr': 0.000000001, 'decay': 1}, gpu=False):
+    def __init__(self, nv, nh, calib_optimizer='sgd', calib_opt_params={'lr': 0.000000001, 'decay': 1, 'minlr':np.inf}, gpu=False):
         super().__init__(nv, nh, calib_optimizer, calib_opt_params, gpu)
         self.p = np.ones((nv, nh))
         self.q = np.ones(nv)
@@ -477,7 +466,7 @@ class RBMStaticEstimatorFull(RBMStaticEstimator):
         self.r += self.optimizer_r((self.bh * hs - self.bh * hn).sum(axis=0))
 
 class RBMCalibWithSampler(RBM): #This is abstract
-    def __init__(self, nv, nh, optimizer='momentum', opt_params={ 'lr': 0.01,'alpha': 0.9,'decay': 1}, batch_size=100, gpu=False, j_limit=None, h_limit=None, calib_optimizer='sgd', calib_w_params={'lr': 0.000001, 'decay': 1}, calib_bv_params={'lr': 0.000001, 'decay': 1}, calib_bh_params={'lr': 0.000001, 'decay': 1}):
+    def __init__(self, nv, nh, optimizer='momentum', opt_params={ 'lr': 0.01,'alpha': 0.9,'decay': 1, 'minlr':np.inf}, batch_size=100, gpu=False, j_limit=None, h_limit=None, calib_optimizer='sgd', calib_w_params={'lr': 0.000001, 'decay': 1}, calib_bv_params={'lr': 0.000001, 'decay': 1}, calib_bh_params={'lr': 0.000001, 'decay': 1}):
         super().__init__(nv, nh, optimizer, opt_params, batch_size, gpu, j_limit, h_limit)
         self.init_calib_params()
         self.optimizer_alpha = select_optimizer(calib_optimizer, calib_w_params)
