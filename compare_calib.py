@@ -19,8 +19,8 @@ COMP_SAMPLE_NUMS = [1000, 10000, 100000, 1000000]
 MANY_N_TH = 0
 #MANY_N_TH = 5
 MANY_N = 10
-#MODE = 'DWAVEAdvantage'
-MODE = 'GIBBS'
+MODE = 'DWAVEAdvantage'
+#MODE = 'GIBBS'
 K = 1
 
 START_SEED = 1
@@ -101,7 +101,7 @@ if __name__ == '__main__':
         ideal_weight_energies = tmp_rbm.get_weight_energy(ideal_vs, ideal_hs)
         ideal_visible_energies = tmp_rbm.get_visible_bias_energy(ideal_vs)
         ideal_hidden_energies = tmp_rbm.get_hidden_bias_energy(ideal_hs)
-        np.save(save_dir + f'/{s}/ideal_energies', np.hstack([ideal_total_energies.reshape(-1, 1), ideal_weight_energies.reshape(-1, 1), ideal_visible_energies.reshape(-1, 1), ideal_hidden_energies.reshape(-1, 1)]))
+        np.save(save_dir + f'/{s}/ideal_energies', np.vstack([ideal_total_energies, ideal_weight_energies, ideal_visible_energies, ideal_hidden_energies]))
         
         for i, rbm in enumerate(rbms):
             print(f'Calibrating {i}')
@@ -158,9 +158,9 @@ if __name__ == '__main__':
             hidden_energies = tmp_rbm.get_hidden_bias_energy(eval_hs)
             generate_hist(hidden_energies, ideal_hidden_energies, save_dir + f'/{s}/hist_bh{i}.png', 0.5)
 
-            np.save(save_dir + f'/{s}/energies{i}', np.hstack([total_energies.reshape(-1, 1), weight_energies.reshape(-1, 1), visible_energies.reshape(-1, 1), hidden_energies.reshape(-1, 1)]))
+            np.save(save_dir + f'/{s}/energies{i}', np.vstack([total_energies, weight_energies, visible_energies, hidden_energies]))
         
         np.savetxt(save_dir + f'/{s}/kls.csv', kls[k], delimiter=',')
     print(kls[:,:,1:].mean(axis=0))
     print(kls[:,:,1:].std(axis=0))
-    np.savetxt(save_dir + f'/summary_kl_{time_str}.csv', np.hstack([kls[0,:,0].reshape(-1,1), kls[:,:,1:].mean(axis=0), kls[:,:,1:].std(axis=0)]), delimiter=',')
+    np.savetxt(save_dir + f'/summary_kl_{time_str}.csv', np.vstack([kls[0,:,0].reshape(-1,1), kls[:,:,1:].mean(axis=0), kls[:,:,1:].std(axis=0)]), delimiter=',')

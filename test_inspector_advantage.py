@@ -1,8 +1,12 @@
 from dwave.system import DWaveSampler, FixedEmbeddingComposite, EmbeddingComposite
+from dwave.cloud import Client
 import dwave.inspector
 import os
 
 token = os.environ.get("dwave_token")
+client = Client.from_config(token=token)
+
+print(client.get_solvers())
 
 START_HOR = 60
 START_VER = 3000
@@ -58,7 +62,7 @@ for i in range(3000, 5700):
 for dead in DEAD_NODES:
     del embedding[dead]
 
-sampler = DWaveSampler(solver='Advantage_system6.2', token=os.environ.get("dwave_token"))
+sampler = DWaveSampler(solver='Advantage_system6.3', token=os.environ.get("dwave_token"))
 embedded_sampler = FixedEmbeddingComposite(sampler, embedding=embedding)
 
 for i in range(60, 2760):
